@@ -1,11 +1,7 @@
 import os
 import streamlit as st
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-
-import time
+import requests
+from bs4 import BeautifulSoup
 
 # ================= KEYWORDS =================
 KEYWORDS = [
@@ -21,7 +17,7 @@ KEYWORDS = [
     "laws that govern this agreement", "resolution under applicable laws", "disputes will be governed", 
     "will be tried in the courts of", "subject to the courts of", "interpretation shall follow the laws of", 
     "all disputes arising out of", "under the exclusive jurisdiction", "any claim shall be brought in", 
-    "regulated by the laws of", "competent courts of", "Indian Law",   "Indian Law","Indian Laws","governing laws",
+    "regulated by the laws of", "competent courts of", "Indian Law", "Indian Law","Indian Laws","governing laws",
     "applicable laws","law of","subject to the law of","under the law of","dispute shall be resolved",
     "governed by","law and regulation of","laws of the state","laws of the states","court of",
     "exclusive venue for any disputes","in accordance with the law of","will be interpreted under the law of",
@@ -36,26 +32,27 @@ KEYWORDS = [
 def normalize(text):
     return " ".join(text.lower().split())
 
-# ================= FETCH PAGE DATA ONLY =================
+# ================= FETCH PAGE DATA =================
 def get_page_text(url):
-    options = Options()
-    options.add_argument("--headless=new")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--window-size=1920,1080")
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
 
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
-    )
+        response = requests.get(url, headers=headers, timeout=15)
 
-    driver.get(url)
-    time.sleep(6)  # wait for JS-rendered content
+        soup = BeautifulSoup(response.text, "html.parser")
 
-    text = driver.execute_script("return document.body.innerText;")
-    driver.quit()
+        # remove scripts and styles
+        for tag in soup(["script", "style", "noscript"]):
+            tag.extract()
 
-    return normalize(text)
+        text = soup.get_text(separator=" ")
+
+        return normalize(text)
+
+    except Exception as e:
+        return ""
 
 # ================= KEYWORD MATCH =================
 def extract_keywords(page_text):
@@ -63,27 +60,31 @@ def extract_keywords(page_text):
     for kw in KEYWORDS:
         if normalize(kw) in page_text:
             found.append(kw)
-    return list(dict.fromkeys(found))  # remove duplicates
+    return list(dict.fromkeys(found))
 
 # ================= STREAMLIT UI =================
-st.set_page_config("ILKEY Page Checker", layout="centered")
+st.set_page_config(page_title="ILKEY Page Checker", layout="centered")
+
 st.title("🔍 ILKEY Keyword Checker (Page Content Only)")
 
 url = st.text_input("Enter website URL")
+
 check = st.button("Check")
 
 if check:
+
     if not url:
         st.error("Please enter a URL")
+
     else:
+
         with st.spinner("Reading page content..."):
+
             page_text = get_page_text(url)
 
         keywords_found = extract_keywords(page_text)
 
-        # ✅ FINAL OUTPUT LOGIC
         if keywords_found:
             st.code(str(keywords_found), language="python")
         else:
             st.code("No ILKEY found in this page")
-            
